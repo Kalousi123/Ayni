@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.production.example
+node_modules
+dist
+dist-demo
+coverage
+server/data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

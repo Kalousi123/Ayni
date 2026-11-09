@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.production}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - ayni-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "4174"
+      COOKIE_SECURE: "1"
+      TRUST_PROXY: "1"
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
+      SMTP_URL: ${SMTP_URL:?Set SMTP_URL in .env.production}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env.production}
+      AYNI_AUTH_KEY: ${AYNI_AUTH_KEY:?Set AYNI_AUTH_KEY in .env.production}
+      VECINO_CHAIR_CODE: ${VECINO_CHAIR_CODE:?Set VECINO_CHAIR_CODE in .env.production}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "4174"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4174/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  https:
+    image: caddy:2-alpine
+    environment:
+      AYNI_DOMAIN: ${AYNI_DOMAIN:?Set AYNI_DOMAIN in .env.production}
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  ayni-postgres:
+  caddy-data:
+  caddy-config:
